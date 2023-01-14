@@ -1,11 +1,12 @@
 package guru.springframework.jdbc.dao;
 
 import guru.springframework.jdbc.domain.Author;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.TypedQuery;
+import jakarta.persistence.*;
+import jakarta.persistence.criteria.*;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /**
  * Created by jt on 8/28/21.
@@ -21,6 +22,32 @@ public class AuthorDaoImpl implements AuthorDao {
     }
 
     @Override
+    public List<Author> findAll() {
+        EntityManager em =  getEntityManager();
+        try{
+            TypedQuery<Author> typedQuery = em.createNamedQuery("author_find_all", Author.class);
+            return typedQuery.getResultList();
+        }
+        finally {
+            em.close();
+        }
+    }
+
+    @Override
+    public List<Author> listAuthorByLastNameLike(String lastName) {
+        EntityManager em = getEntityManager();
+        try{
+            Query query = em.createQuery("SELECT a from Author a WHERE a.lastName like :last_name");
+            query.setParameter("last_name", lastName + "%");
+            List<Author> authors = query.getResultList();
+
+            return authors;
+        }finally{
+            em.close();
+        }
+    }
+
+    @Override
     public Author getById(Long id) {
         EntityManager em = getEntityManager();
         Author author = getEntityManager().find(Author.class, id);
@@ -31,8 +58,8 @@ public class AuthorDaoImpl implements AuthorDao {
     @Override
     public Author findAuthorByName(String firstName, String lastName) {
         EntityManager em = getEntityManager();
-        TypedQuery<Author> query = em.createQuery("SELECT a FROM Author a WHERE a.firstName= :first_name and " +
-                "a.lastName = :last_name", Author.class);
+
+        TypedQuery<Author> query = em.createNamedQuery("author_find_by_name", Author.class);
         query.setParameter("first_name", firstName);
         query.setParameter("last_name", lastName);
 
@@ -41,6 +68,52 @@ public class AuthorDaoImpl implements AuthorDao {
 
         return author;
     }
+
+    @Override
+    public Author findAuthorByNameNative(String firstName, String lastName) {
+        EntityManager em = getEntityManager();
+
+        try {
+            Query query = em.createNativeQuery("SELECT * FROM Author a WHERE a.first_name = ? and a.last_name = ?", Author.class);
+            query.setParameter(1, firstName);
+            query.setParameter(2, lastName);
+
+
+            return (Author) query.getSingleResult();
+        }finally {
+            em.close();
+        }
+
+    }
+
+    @Override
+    public Author findAuthorByNameCriteria(String firstName, String lastName) {
+        EntityManager em = getEntityManager();
+
+        try {
+            CriteriaBuilder criteriaBuilder = em.getCriteriaBuilder();
+            CriteriaQuery<Author> criteriaQuery = criteriaBuilder.createQuery(Author.class);
+            Root<Author> root = criteriaQuery.from(Author.class);
+
+            ParameterExpression<String> firstNameParam = criteriaBuilder.parameter(String.class);
+            ParameterExpression<String> lastNameParam = criteriaBuilder.parameter(String.class);
+
+            Predicate firstNamePred = criteriaBuilder.equal(root.get("firstName"), firstNameParam);
+            Predicate lastNamePred = criteriaBuilder.equal(root.get("lastName"), lastNameParam);
+
+            criteriaQuery.select(root).where(criteriaBuilder.and(firstNamePred, lastNamePred));
+
+            TypedQuery<Author> typedQuery = em.createQuery(criteriaQuery);
+            typedQuery.setParameter(firstNameParam, firstName);
+            typedQuery.setParameter(lastNameParam, lastName);
+
+
+            return typedQuery.getSingleResult();
+        }finally {
+            em.close();
+        }
+    }
+
 
     @Override
     public Author saveNewAuthor(Author author) {
